@@ -1,153 +1,148 @@
-# 🧹 CleanCheck MVP
+# CleanCheck MVP
 
-Application SaaS de gestion de prestations de ménage avec QR Code. Permet aux clients de gérer leurs sites et aux intervenants de valider leur travail sans compte utilisateur.
+Application SaaS de gestion de prestations de ménage avec QR Code.
 
-## ✨ Fonctionnalités
+## 🚀 Fonctionnalités
 
-### Espace Client (Dashboard Web)
-- 🔐 **Authentification** - Inscription/Connexion sécurisée
-- 📍 **Gestion des sites** - Créer, modifier, supprimer des sites
-- ✅ **Gestion des tâches** - Définir les tâches standards par site
-- 📱 **QR Code** - Génération et impression de QR Code unique par site
-- 📊 **Historique** - Suivi des interventions (Date, Heure, Durée, Intervenant)
-- 🔒 **PIN de sécurité** - Code PIN optionnel pour sécuriser l'accès
+- 📱 **Scan QR Code** - Les intervenants scannent pour commencer/terminer une mission
+- ✅ **Checklist de tâches** - Liste personnalisable de tâches par site
+- ⏱️ **Timer automatique** - Suivi du temps d'intervention
+- 📊 **Dashboard** - Vue d'ensemble des sites et sessions
+- 🔐 **Authentification** - Système de connexion sécurisé
+- 📝 **Historique** - Toutes les interventions sont enregistrées
 
-### Espace Intervenant (PWA Mobile)
-- 📱 **Check-in par QR Code** - Scan du QR Code pour démarrer une mission
-- ⏱️ **Timer en temps réel** - Suivi du temps écoulé
-- ✅ **Checklist de tâches** - Cocher les tâches effectuées
-- 🎉 **Check-out** - Récapitulatif et validation de l'intervention
+## 🛠️ Stack Technique
 
-### Technique
-- 📱 **PWA** - Installable sur mobile (iOS/Android)
-- 🔒 **Authentification** - NextAuth.js avec credentials
-- 🗄️ **Base de données** - Prisma avec SQLite
+- **Frontend**: Next.js 16, React 19, Tailwind CSS 4
+- **Backend**: Next.js API Routes, Prisma ORM
+- **Database**: SQLite (développement) / PostgreSQL (production)
+- **Auth**: NextAuth.js
+- **UI**: shadcn/ui
 
-## 🚀 Installation
+## 📦 Installation locale
+
+```bash
+# Cloner le repository
+git clone https://github.com/topmuch/cleancheck.git
+cd cleancheck
+
+# Installer les dépendances
+npm install
+
+# Configurer l'environnement
+cp .env.example .env
+# Éditer .env avec vos valeurs
+
+# Initialiser la base de données
+npx prisma generate
+npx prisma db push
+
+# (Optionnel) Seeder la base de données
+npm run db:seed
+
+# Démarrer en développement
+npm run dev
+```
+
+## 🐳 Déploiement Docker
+
+```bash
+# Construire l'image
+docker build -t cleancheck .
+
+# Lancer le conteneur
+docker run -p 3000:3000 \
+  -e NEXTAUTH_URL=https://votre-domaine.com \
+  -e NEXTAUTH_SECRET=votre-secret \
+  -v cleancheck_data:/app/data \
+  cleancheck
+```
+
+## ☁️ Déploiement sur Coolify
 
 ### 1. Prérequis
-- Node.js 18+ ou Bun
 
-### 2. Installation des dépendances
+- Un serveur avec Coolify installé
+- Un domaine configuré
+
+### 2. Configuration dans Coolify
+
+1. **Créer une nouvelle application**
+   - Type: Docker
+   - Source: Git Repository
+   - Repository: `https://github.com/topmuch/cleancheck`
+   - Branch: `main`
+
+2. **Configuration Docker**
+   - Dockerfile location: `/Dockerfile`
+
+3. **Variables d'environnement**
+
+```env
+DATABASE_URL=file:/app/data/cleancheck.db
+NEXTAUTH_URL=https://votre-domaine.com
+NEXTAUTH_SECRET=générer-avec-openssl-rand-base64-32
+NODE_ENV=production
+```
+
+4. **Volume persistant**
+
+Créer un volume pour la base de données:
+- Mount point: `/app/data`
+
+### 3. Déployer
+
+Cliquer sur "Deploy" dans Coolify.
+
+### 4. Post-déploiement
+
+Après le premier déploiement, exécuter le seed pour créer les données de démo:
 
 ```bash
-bun install
+# Dans le conteneur
+docker exec -it <container-id> npx prisma db seed
 ```
 
-### 3. Configuration de la base de données
+Ou créer un utilisateur manuellement via l'interface d'inscription.
 
-La base de données SQLite est créée automatiquement. Pour initialiser :
+## 🔑 Compte de démonstration
 
-```bash
-bun run db:push
-```
+- **Email**: `demo@cleancheck.com`
+- **Mot de passe**: `demo123`
 
-### 4. Lancement en développement
-
-```bash
-bun run dev
-```
-
-L'application sera accessible sur [http://localhost:3000](http://localhost:3000)
-
-## 📁 Structure du Projet
+## 📁 Structure du projet
 
 ```
-src/
-├── app/                    # Pages Next.js (App Router)
-│   ├── api/               # Routes API
-│   │   ├── auth/          # NextAuth.js
-│   │   ├── sites/         # CRUD Sites
-│   │   ├── tasks/         # CRUD Tâches
-│   │   ├── sessions/      # Sessions de ménage
-│   │   └── mission/       # Check-in par QR
-│   ├── login/             # Page de connexion
-│   ├── signup/            # Page d'inscription
-│   ├── dashboard/         # Espace client
-│   │   └── site/[id]/     # Détail d'un site
-│   ├── mission/[token]/   # Check-in intervenant
-│   ├── work/[session_id]/ # Travail intervenant
-│   └── checkout/...       # Récapitulatif
-├── components/
-│   └── ui/                # Composants shadcn/ui
-├── contexts/
-│   └── AuthContext.tsx    # Contexte d'authentification
-├── lib/
-│   ├── auth.ts            # Configuration NextAuth
-│   └── db.ts              # Client Prisma
-└── types/
-    └── database.ts        # Types TypeScript
-
-prisma/
-└── schema.prisma          # Schéma de la base de données
-
-public/
-├── icons/                 # Icônes PWA
-├── manifest.json          # Manifest PWA
-└── sw.js                  # Service Worker
+├── src/
+│   ├── app/                 # Pages Next.js App Router
+│   │   ├── api/             # API Routes
+│   │   ├── dashboard/       # Dashboard client
+│   │   ├── login/           # Page de connexion
+│   │   ├── mission/         # Interface travailleur (QR)
+│   │   └── signup/          # Page d'inscription
+│   ├── components/          # Composants React
+│   ├── lib/                 # Utilitaires et configuration
+│   └── actions/             # Server Actions
+├── prisma/
+│   ├── schema.prisma        # Schéma base de données
+│   └── seed.ts              # Données initiales
+├── public/                  # Fichiers statiques
+├── Dockerfile               # Image Docker
+├── docker-compose.yml       # Orchestration Docker
+└── docker-entrypoint.sh     # Script de démarrage
 ```
 
-## 🔧 Scripts Disponibles
+## 🌐 URLs importantes
 
-```bash
-bun run dev      # Serveur de développement
-bun run build    # Build de production
-bun run lint     # Vérification ESLint
-bun run db:push  # Synchroniser la DB avec Prisma
-```
+| Page | Description |
+|------|-------------|
+| `/` | Page d'accueil |
+| `/login` | Connexion |
+| `/signup` | Inscription |
+| `/dashboard` | Tableau de bord |
+| `/dashboard/site/[id]` | Détails d'un site |
+| `/mission/[token]` | Interface travailleur |
 
-## 📱 PWA
+## 📝 Licence
 
-L'application est installable sur mobile :
-1. Ouvrir l'application dans le navigateur mobile
-2. Ajouter à l'écran d'accueil
-3. L'application fonctionne hors-ligne (partiellement)
-
-## 🔒 Sécurité
-
-### Authentification
-- Mots de passe hashés avec bcrypt
-- Sessions JWT avec NextAuth.js
-- Protection des routes par middleware
-
-### QR Code
-- Token unique par site (cuid)
-- Aucune donnée sensible dans le QR Code
-- PIN optionnel pour sécuriser l'accès
-
-## 🎨 Stack Technique
-
-- **Framework**: Next.js 16 (App Router)
-- **Styling**: Tailwind CSS 4 + shadcn/ui
-- **Database**: Prisma + SQLite
-- **Auth**: NextAuth.js
-- **QR Code**: qrcode.react
-- **Icons**: Lucide React
-- **Language**: TypeScript 5
-
-## 📝 API Endpoints
-
-| Méthode | Endpoint | Description |
-|---------|----------|-------------|
-| POST | /api/register | Inscription utilisateur |
-| POST | /api/auth/signin | Connexion |
-| GET | /api/sites | Liste des sites |
-| POST | /api/sites | Créer un site |
-| GET | /api/sites/[id] | Détail d'un site |
-| DELETE | /api/sites/[id] | Supprimer un site |
-| GET | /api/tasks?siteId= | Tâches d'un site |
-| POST | /api/tasks | Créer une tâche |
-| DELETE | /api/tasks?id= | Supprimer une tâche |
-| GET | /api/mission/[token] | Infos site par QR |
-| POST | /api/sessions | Créer une session |
-| GET | /api/sessions/[id] | Détail session |
-| PUT | /api/sessions/[id] | Terminer session |
-| PUT | /api/session-tasks/[id] | Cocher tâche |
-
-## 📄 License
-
-MIT License - voir le fichier LICENSE pour plus de détails.
-
----
-
-Développé avec ❤️ pour simplifier la gestion des prestations de ménage.
+MIT
