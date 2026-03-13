@@ -1,0 +1,164 @@
+// CleanCheck MVP - Schéma Prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// MODELS PRINCIPAUX
+// ============================================
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  password     String
+  name         String?
+  role         Role      @default(CLIENT)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  
+  sites        Site[]
+  accounts     Account[]
+  sessions     AuthSession[]
+}
+
+enum Role {
+  CLIENT
+  ADMIN
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model AuthSession {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ============================================
+// SITES (Lieux de ménage)
+// ============================================
+
+model Site {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  address     String?
+  pinCode     String?
+  qrToken     String   @unique @default(cuid())
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tasks             Task[]
+  cleaningSessions  CleaningSession[]
+  
+  @@index([userId])
+  @@index([qrToken])
+}
+
+// ============================================
+// TÂCHES STANDARDS PAR SITE
+// ============================================
+
+model Task {
+  id          String   @id @default(cuid())
+  siteId      String
+  name        String
+  description String?
+  orderIndex  Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  site          Site          @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  sessionTasks  SessionTask[]
+  
+  @@index([siteId])
+}
+
+// ============================================
+// SESSIONS DE MÉNAGE (Prestations)
+// ============================================
+
+model CleaningSession {
+  id              String        @id @default(cuid())
+  siteId          String
+  workerName      String
+  startTime       DateTime      @default(now())
+  endTime         DateTime?
+  durationSeconds Int?
+  status          SessionStatus @default(IN_PROGRESS)
+  notes           String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  site          Site          @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  sessionTasks  SessionTask[]
+  
+  @@index([siteId])
+  @@index([status])
+}
+
+enum SessionStatus {
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+// ============================================
+// TÂCHES COMPLÉTÉES PAR SESSION
+// ============================================
+
+model SessionTask {
+  id          String    @id @default(cuid())
+  sessionId   String
+  taskId      String
+  completed   Boolean   @default(false)
+  completedAt DateTime?
+  notes       String?
+  createdAt   DateTime  @default(now())
+  
+  session   CleaningSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  task      Task            @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  
+  @@index([sessionId])
+  @@unique([sessionId, taskId])
+}
+
+// ============================================
+// VERIFICATION TOKEN (pour NextAuth)
+// ============================================
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
