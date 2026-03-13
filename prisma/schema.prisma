@@ -1,5 +1,3 @@
-// CleanCheck MVP - Schéma Prisma
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -9,31 +7,8 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ============================================
-// MODELS PRINCIPAUX
-// ============================================
-
-model User {
-  id           String    @id @default(cuid())
-  email        String    @unique
-  password     String
-  name         String?
-  role         Role      @default(CLIENT)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  
-  sites        Site[]
-  accounts     Account[]
-  sessions     AuthSession[]
-}
-
-enum Role {
-  CLIENT
-  ADMIN
-}
-
 model Account {
-  id                String  @id @default(cuid())
+  id                String  @id
   userId            String
   type              String
   provider          String
@@ -45,115 +20,97 @@ model Account {
   scope             String?
   id_token          String?
   session_state     String?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  User              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
 }
 
 model AuthSession {
-  id           String   @id @default(cuid())
+  id           String   @id
   sessionToken String   @unique
   userId       String
   expires      DateTime
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  User         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
-
-// ============================================
-// SITES (Lieux de ménage)
-// ============================================
-
-model Site {
-  id          String   @id @default(cuid())
-  userId      String
-  name        String
-  address     String?
-  pinCode     String?
-  qrToken     String   @unique @default(cuid())
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tasks             Task[]
-  cleaningSessions  CleaningSession[]
-  
-  @@index([userId])
-  @@index([qrToken])
-}
-
-// ============================================
-// TÂCHES STANDARDS PAR SITE
-// ============================================
-
-model Task {
-  id          String   @id @default(cuid())
-  siteId      String
-  name        String
-  description String?
-  orderIndex  Int      @default(0)
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  site          Site          @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  sessionTasks  SessionTask[]
-  
-  @@index([siteId])
-}
-
-// ============================================
-// SESSIONS DE MÉNAGE (Prestations)
-// ============================================
 
 model CleaningSession {
-  id              String        @id @default(cuid())
+  id              String        @id
   siteId          String
   workerName      String
   startTime       DateTime      @default(now())
   endTime         DateTime?
   durationSeconds Int?
-  status          SessionStatus @default(IN_PROGRESS)
+  status          String        @default("IN_PROGRESS")
   notes           String?
   createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-  
-  site          Site          @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  sessionTasks  SessionTask[]
-  
-  @@index([siteId])
+  updatedAt       DateTime
+  Site            Site          @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  SessionTask     SessionTask[]
+
   @@index([status])
+  @@index([siteId])
 }
-
-enum SessionStatus {
-  IN_PROGRESS
-  COMPLETED
-  CANCELLED
-}
-
-// ============================================
-// TÂCHES COMPLÉTÉES PAR SESSION
-// ============================================
 
 model SessionTask {
-  id          String    @id @default(cuid())
-  sessionId   String
-  taskId      String
-  completed   Boolean   @default(false)
-  completedAt DateTime?
-  notes       String?
-  createdAt   DateTime  @default(now())
-  
-  session   CleaningSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  task      Task            @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  
-  @@index([sessionId])
+  id              String          @id
+  sessionId       String
+  taskId          String
+  completed       Boolean         @default(false)
+  completedAt     DateTime?
+  notes           String?
+  createdAt       DateTime        @default(now())
+  Task            Task            @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  CleaningSession CleaningSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
   @@unique([sessionId, taskId])
+  @@index([sessionId])
 }
 
-// ============================================
-// VERIFICATION TOKEN (pour NextAuth)
-// ============================================
+model Site {
+  id              String            @id
+  userId          String
+  name            String
+  address         String?
+  pinCode         String?
+  qrToken         String            @unique
+  isActive        Boolean           @default(true)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime
+  CleaningSession CleaningSession[]
+  User            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  Task            Task[]
+
+  @@index([qrToken])
+  @@index([userId])
+}
+
+model Task {
+  id          String        @id
+  siteId      String
+  name        String
+  description String?
+  orderIndex  Int           @default(0)
+  isActive    Boolean       @default(true)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime
+  SessionTask SessionTask[]
+  Site        Site          @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([siteId])
+}
+
+model User {
+  id          String        @id
+  email       String        @unique
+  password    String
+  name        String?
+  role        String        @default("CLIENT")
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime
+  Account     Account[]
+  AuthSession AuthSession[]
+  Site        Site[]
+}
 
 model VerificationToken {
   identifier String
