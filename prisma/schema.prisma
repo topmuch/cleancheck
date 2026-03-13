@@ -51,18 +51,22 @@ model User {
   password         String
   name             String?
   phone            String?
+  avatar           String?            // URL de la photo
   role             String             @default("OWNER") // OWNER, AGENCY, MANAGER, EMPLOYEE, SUPERADMIN
-  agencyId         String?            // Pour les employés/managers d'agence
+  agencyId         String?
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
-  
+
   // Relations
   Account          Account[]
   AuthSession      AuthSession[]
   Agency           Agency?            @relation(fields: [agencyId], references: [id])
+  OwnedAgencies    Agency[]           @relation("AgencyOwner")
   Sites            Site[]             @relation("OwnerSites")
   CleaningSessions CleaningSession[]
   Notifications    Notification[]
+  EmployeeProfile  Employee?
+  TimeEntries      TimeEntry[]
 
   @@index([role])
   @@index([agencyId])
@@ -71,62 +75,327 @@ model User {
 // ==================== AGENCY ====================
 
 model Agency {
-  id        String   @id @default(cuid())
-  name      String
-  email     String?  // Contact email
-  phone     String?
-  address   String?
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  
+  id           String   @id @default(cuid())
+  name         String
+  slug         String   @unique
+  email        String?
+  phone        String?
+  address      String?
+  siret        String?  // Numéro SIRET
+  tvaNumber    String?  // Numéro TVA
+  logo         String?  // URL du logo
+  primaryColor String?  @default("#3B82F6")
+  currency     String   @default("EUR")
+  ownerId      String   // Propriétaire de l'agence
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
   // Relations
-  Users       User[]      // Employés/managers
-  Sites       Site[]      @relation("AgencyClients") // Clients gérés par l'agence
-  Employees   Employee[]
+  Owner        User              @relation("AgencyOwner", fields: [ownerId], references: [id])
+  Users        User[]
+  Employees    Employee[]
+  Sites        Site[]            @relation("AgencyClients")
+  Clients      Client[]          // Clients de l'agence
+  Invoices     Invoice[]
+  Quotes       Quote[]
+  Expenses     Expense[]
+  Products     Product[]
+  Equipments   Equipment[]
+
+  @@index([slug])
 }
 
+// ==================== EMPLOYEES (RH) ====================
+
 model Employee {
-  id        String   @id @default(cuid())
-  name      String
-  email     String?  // Optionnel (pour login futur)
-  phone     String
-  isActive  Boolean  @default(true)
-  agencyId  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  
+  id             String   @id @default(cuid())
+  userId         String?  @unique // Lien optionnel avec un compte utilisateur
+  agencyId       String
+  firstName      String
+  lastName       String
+  email          String?
+  phone          String
+  photo          String?  // URL photo
+  address        String?
+  birthDate      DateTime?
+  hireDate       DateTime?
+  endDate        DateTime? // Date de fin de contrat
+  status         String   @default("ACTIVE") // ACTIVE, ON_LEAVE, TERMINATED
+  hourlyRate     Float?   // Taux horaire
+  monthlySalary  Float?   // Salaire mensuel
+  skills         String?  // JSON array de compétences
+  languages      String?  // JSON array de langues parlées
+  notes          String?
+  emergencyContact String?
+  emergencyPhone   String?
+  bankName       String?
+  bankIban       String?
+  bankBic        String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
   // Relations
-  agency          Agency           @relation(fields: [agencyId], references: [id], onDelete: Cascade)
-  CleaningSession CleaningSession[]
-  
+  User           User?              @relation(fields: [userId], references: [id])
+  Agency         Agency             @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  Availabilities Availability[]
+  Sessions       CleaningSession[]
+  ScheduledSessions ScheduledSession[]
+  TimeEntries    TimeEntry[]
+  Documents      EmployeeDocument[]
+  Leaves         Leave[]
+
   @@index([agencyId])
+  @@index([status])
+}
+
+model Availability {
+  id           String   @id @default(cuid())
+  employeeId   String
+  dayOfWeek    Int      // 0=Dimanche, 1=Lundi, ..., 6=Samedi
+  startTime    String   // "09:00"
+  endTime      String   // "17:00"
+  isAvailable  Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  Employee     Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, dayOfWeek])
+  @@index([employeeId])
+}
+
+model Leave {
+  id          String   @id @default(cuid())
+  employeeId  String
+  type        String   // ANNUAL, SICK, MATERNITY, UNPAID, OTHER
+  startDate   DateTime
+  endDate     DateTime
+  status      String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  reason      String?
+  notes       String?
+  approvedBy  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  Employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@index([status])
+}
+
+model EmployeeDocument {
+  id          String   @id @default(cuid())
+  employeeId  String
+  type        String   // CONTRACT, ID, INSURANCE, CERTIFICATION, OTHER
+  name        String
+  fileUrl     String   // URL du fichier
+  expiryDate  DateTime?
+  isVerified  Boolean  @default(false)
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  Employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@index([type])
+}
+
+model TimeEntry {
+  id          String   @id @default(cuid())
+  employeeId  String
+  userId      String?  // Si entrée par un utilisateur
+  sessionId   String?  // Lien avec une session de nettoyage
+  date        DateTime
+  clockIn     DateTime
+  clockOut    DateTime?
+  breakMinutes Int    @default(0)
+  totalMinutes Int?   // Calculé automatiquement
+  location    String?
+  notes       String?
+  isManual    Boolean @default(false) // Si entrée manuelle
+  status      String  @default("PENDING") // PENDING, APPROVED, REJECTED
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  Employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  User        User?    @relation(fields: [userId], references: [id])
+
+  @@index([employeeId])
+  @@index([date])
+}
+
+// ==================== CLIENTS (CRM) ====================
+
+model Client {
+  id           String   @id @default(cuid())
+  agencyId     String
+  firstName    String?
+  lastName     String?
+  companyName  String?  // Si client professionnel
+  email        String?
+  phone        String
+  phone2       String?  // Téléphone secondaire
+  address      String?
+  city         String?
+  postalCode   String?
+  country      String   @default("France")
+  notes        String?
+  source       String?  // Comment le client a été acquis
+  status       String   @default("PROSPECT") // PROSPECT, ACTIVE, INACTIVE, LOST
+  totalSpent   Float    @default(0)
+  lastServiceDate DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  Agency       Agency             @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  Sites        Site[]
+  Contracts    Contract[]
+  Invoices     Invoice[]
+  Quotes       Quote[]
+  Notes        ClientNote[]
+  Preferences  ClientPreference[]
+
+  @@index([agencyId])
+  @@index([status])
+}
+
+model ClientNote {
+  id          String   @id @default(cuid())
+  clientId    String
+  type        String   // GENERAL, PREFERENCE, INCIDENT, COMPLAINT, OTHER
+  title       String?
+  content     String
+  isImportant Boolean  @default(false)
+  createdBy   String?  // userId
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  Client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@index([type])
+}
+
+model ClientPreference {
+  id          String   @id @default(cuid())
+  clientId    String
+  category    String   // CLEANING, ACCESS, PETS, PRODUCTS, OTHER
+  key         String   // Ex: "has_pets", "alarm_code", "preferred_products"
+  value       String   // Valeur de la préférence
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  Client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, category, key])
+  @@index([clientId])
+}
+
+model Contract {
+  id          String   @id @default(cuid())
+  clientId    String
+  siteId      String?  // Site spécifique si applicable
+  name        String
+  type        String   // RECURRING, ONE_TIME, HOURLY
+  startDate   DateTime
+  endDate     DateTime?
+  frequency   String?  // WEEKLY, BIWEEKLY, MONTHLY
+  dayOfWeek   Int?     // Jour de la semaine pour récurrent
+  price       Float
+  priceType   String   @default("FIXED") // FIXED, HOURLY, M2
+  hoursIncluded Float? // Heures incluses
+  status      String   @default("ACTIVE") // DRAFT, ACTIVE, SUSPENDED, TERMINATED
+  terms       String?  // Conditions
+  autoRenew   Boolean  @default(false)
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  Client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  Site        Site?    @relation(fields: [siteId], references: [id])
+
+  @@index([clientId])
+  @@index([status])
 }
 
 // ==================== SITE & TASKS ====================
 
 model Site {
-  id          String   @id @default(cuid())
-  userId      String   // Propriétaire (client particulier)
-  agencyId    String?  // Si géré par une agence
-  name        String
-  address     String?
-  pinCode     String?
-  qrToken     String   @unique
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
+  id           String   @id @default(cuid())
+  userId       String?  // Propriétaire (client particulier)
+  clientId     String?  // Client de l'agence
+  agencyId     String?  // Si géré par une agence
+  name         String
+  type         String   @default("HOME") // HOME, OFFICE, COMMERCIAL, INDUSTRIAL, OTHER
+  address      String?
+  city         String?
+  postalCode   String?
+  country      String   @default("France")
+  surface      Float?   // Surface en m²
+  rooms        Int?
+  bathrooms    Int?
+  floors       Int?
+  pinCode      String?
+  qrToken      String   @unique
+  accessCode   String?  // Code d'accès
+  alarmCode    String?  // Code alarme
+  keyLocation  String?  // Où trouver la clé
+  parkingInfo  String?
+  instructions String?  // Instructions spéciales
+  latitude     Float?
+  longitude    Float?
+  zone         String?  // Zone géographique
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
   // Relations
   User             User?              @relation("OwnerSites", fields: [userId], references: [id], onDelete: Cascade)
+  Client           Client?            @relation(fields: [clientId], references: [id])
   Agency           Agency?            @relation("AgencyClients", fields: [agencyId], references: [id], onDelete: SetNull)
+  Contract         Contract[]
   Task             Task[]
   CleaningSession  CleaningSession[]
   ScheduledSession ScheduledSession[]
-  
+  Photos           SitePhoto[]
+  Invoices         Invoice[]
+  Quotes           Quote[]
+
   @@index([qrToken])
   @@index([userId])
+  @@index([clientId])
   @@index([agencyId])
+  @@index([zone])
+}
+
+model SitePhoto {
+  id          String   @id @default(cuid())
+  siteId      String
+  type        String   // BEFORE, AFTER, ISSUE, GENERAL
+  url         String   // URL de la photo
+  caption     String?
+  sessionId   String?  // Lien avec une session
+  takenAt     DateTime @default(now())
+  takenBy     String?  // userId ou employeeId
+  createdAt   DateTime @default(now())
+
+  // Relations
+  Site        Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([siteId])
+  @@index([type])
 }
 
 model Task {
@@ -134,16 +403,20 @@ model Task {
   siteId      String
   name        String
   description String?
+  category    String?       // BATHROOM, KITCHEN, BEDROOM, LIVING, OFFICE, GENERAL
   orderIndex  Int           @default(0)
+  estimatedMinutes Int?     // Temps estimé
+  isRequired  Boolean       @default(true)
   isActive    Boolean       @default(true)
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
-  
+
   // Relations
   Site        Site          @relation(fields: [siteId], references: [id], onDelete: Cascade)
   SessionTask SessionTask[]
-  
+
   @@index([siteId])
+  @@index([category])
 }
 
 // ==================== CLEANING SESSIONS ====================
@@ -151,26 +424,44 @@ model Task {
 model CleaningSession {
   id              String        @id @default(cuid())
   siteId          String
-  employeeId      String?       // Employé de l'agence (optionnel)
-  userId          String?       // Utilisateur connecté (pour les particuliers)
-  workerName      String        // Nom affiché (peut être différent)
-  startTime       DateTime      @default(now())
-  endTime         DateTime?
-  durationSeconds Int?
-  status          String        @default("IN_PROGRESS") // IN_PROGRESS, COMPLETED, CANCELLED
+  employeeId      String?
+  userId          String?
+  scheduledId     String?       // Lien avec session planifiée
+  invoiceId       String?       // Lien avec facture
+  workerName      String
+  scheduledStart  DateTime?
+  scheduledEnd    DateTime?
+  actualStart     DateTime?     @default(now())
+  actualEnd       DateTime?
+  durationMinutes Int?
+  travelTimeMinutes Int?
+  travelDistance  Float?        // Distance en km
+  status          String        @default("SCHEDULED") // SCHEDULED, IN_PROGRESS, COMPLETED, CANCELLED, NO_SHOW
+  qualityScore    Float?        // Note de qualité (0-5)
+  clientRating    Float?        // Note client (0-5)
+  clientFeedback  String?
   notes           String?
+  issues          String?       // Problèmes rencontrés
+  photos          String?       // JSON array d'URLs de photos
+  signature       String?       // URL de signature client
+  verifiedBy      String?       // userId vérificateur
+  verifiedAt      DateTime?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
-  
+
   // Relations
   Site            Site          @relation(fields: [siteId], references: [id], onDelete: Cascade)
   Employee        Employee?     @relation(fields: [employeeId], references: [id])
   User            User?         @relation(fields: [userId], references: [id])
+  ScheduledSession ScheduledSession? @relation(fields: [scheduledId], references: [id])
+  Invoice         Invoice?      @relation(fields: [invoiceId], references: [id])
   SessionTask     SessionTask[]
-  
+  SessionPhoto    SessionPhoto[]
+
   @@index([status])
   @@index([siteId])
   @@index([employeeId])
+  @@index([scheduledStart])
 }
 
 model SessionTask {
@@ -180,8 +471,9 @@ model SessionTask {
   completed       Boolean         @default(false)
   completedAt     DateTime?
   notes           String?
+  photoUrl        String?
   createdAt       DateTime        @default(now())
-  
+
   // Relations
   Task            Task            @relation(fields: [taskId], references: [id], onDelete: Cascade)
   CleaningSession CleaningSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
@@ -190,47 +482,287 @@ model SessionTask {
   @@index([sessionId])
 }
 
+model SessionPhoto {
+  id          String   @id @default(cuid())
+  sessionId   String
+  type        String   // BEFORE, AFTER, ISSUE
+  url         String
+  caption     String?
+  takenAt     DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  // Relations
+  CleaningSession CleaningSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+}
+
 // ==================== SCHEDULED SESSIONS (CALENDAR) ====================
 
 model ScheduledSession {
   id              String           @id @default(cuid())
   siteId          String
-  scheduledDate   DateTime         // Date et heure prévue
-  duration        Int              @default(60) // Durée en minutes
+  employeeId      String?
+  scheduledDate   DateTime
+  duration        Int              @default(60)
   frequency       String           @default("NONE") // NONE, DAILY, WEEKLY, BIWEEKLY, MONTHLY
-  status          String           @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED, CANCELLED
-  assignedTo      String?          // Nom ou ID de l'employé assigné
+  status          String           @default("PENDING") // PENDING, ASSIGNED, IN_PROGRESS, COMPLETED, CANCELLED
+  assignedTo      String?          // Nom si pas d'employé
   notes           String?
-  reminderSent    Boolean          @default(false) // Rappel 24h envoyé
-  reminder1hSent  Boolean          @default(false) // Rappel 1h envoyé
+  reminderSent    Boolean          @default(false)
+  reminder1hSent  Boolean          @default(false)
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
-  
+
   // Relations
   Site            Site             @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  
+  Employee        Employee?        @relation(fields: [employeeId], references: [id])
+  Sessions        CleaningSession[]
+
   @@index([scheduledDate])
   @@index([status])
   @@index([siteId])
+  @@index([employeeId])
+}
+
+// ==================== FINANCE ====================
+
+model Invoice {
+  id             String   @id @default(cuid())
+  agencyId       String
+  clientId       String?
+  siteId         String?
+  number         String   @unique // Numéro de facture
+  quoteId        String?  @unique // Si issue d'un devis
+  status         String   @default("DRAFT") // DRAFT, SENT, VIEWED, PAID, OVERDUE, CANCELLED
+  issueDate      DateTime @default(now())
+  dueDate        DateTime
+  paidDate       DateTime?
+  subtotal       Float
+  tax            Float    @default(0)
+  taxRate        Float?   @default(20) // TVA %
+  discount       Float    @default(0)
+  total          Float
+  notes          String?
+  terms          String?
+  pdfUrl         String?  // URL du PDF généré
+  paymentMethod  String?  // CARD, BANK_TRANSFER, CHECK, CASH
+  paymentRef     String?  // Référence de paiement
+  sendReminder   Boolean  @default(true)
+  reminderSent   Int      @default(0) // Nombre de rappels envoyés
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  Agency         Agency             @relation(fields: [agencyId], references: [id])
+  Client         Client?            @relation(fields: [clientId], references: [id])
+  Site           Site?              @relation(fields: [siteId], references: [id])
+  Quote          Quote?             @relation(fields: [quoteId], references: [id])
+  Sessions       CleaningSession[]
+  Items          InvoiceItem[]
+
+  @@index([agencyId])
+  @@index([clientId])
+  @@index([status])
+  @@index([dueDate])
+}
+
+model InvoiceItem {
+  id          String   @id @default(cuid())
+  invoiceId   String
+  description String
+  quantity    Float
+  unit        String?  @default("heure")
+  unitPrice   Float
+  taxRate     Float?   @default(20)
+  total       Float
+  createdAt   DateTime @default(now())
+
+  // Relations
+  Invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+}
+
+model Quote {
+  id           String   @id @default(cuid())
+  agencyId     String
+  clientId     String?
+  siteId       String?
+  number       String   @unique
+  status       String   @default("DRAFT") // DRAFT, SENT, VIEWED, ACCEPTED, REJECTED, EXPIRED
+  issueDate    DateTime @default(now())
+  validUntil   DateTime
+  subtotal     Float
+  tax          Float    @default(0)
+  discount     Float    @default(0)
+  total        Float
+  notes        String?
+  terms        String?
+  pdfUrl       String?
+  acceptedAt   DateTime?
+  rejectedAt   DateTime?
+  rejectionReason String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  Agency       Agency         @relation(fields: [agencyId], references: [id])
+  Client       Client?        @relation(fields: [clientId], references: [id])
+  Site         Site?          @relation(fields: [siteId], references: [id])
+  Invoice      Invoice?
+  Items        QuoteItem[]
+
+  @@index([agencyId])
+  @@index([clientId])
+  @@index([status])
+}
+
+model QuoteItem {
+  id          String   @id @default(cuid())
+  quoteId     String
+  description String
+  quantity    Float
+  unit        String?  @default("heure")
+  unitPrice   Float
+  taxRate     Float?   @default(20)
+  total       Float
+  createdAt   DateTime @default(now())
+
+  // Relations
+  Quote       Quote    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@index([quoteId])
+}
+
+model Expense {
+  id          String   @id @default(cuid())
+  agencyId    String
+  category    String   // SUPPLIES, EQUIPMENT, SALARY, TRANSPORT, MARKETING, OTHER
+  description String
+  amount      Float
+  date        DateTime
+  receiptUrl  String?
+  isRecurring Boolean  @default(false)
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  Agency      Agency   @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+
+  @@index([agencyId])
+  @@index([category])
+  @@index([date])
 }
 
 // ==================== NOTIFICATIONS ====================
 
 model Notification {
   id              String    @id @default(cuid())
-  userId          String    // Destinataire
-  type            String    // EMAIL, SMS, WHATSAPP
+  userId          String
+  type            String    // EMAIL, SMS, PUSH, IN_APP
+  category        String    // REMINDER, ALERT, INFO, WARNING
   subject         String
   message         String
-  status          String    @default("PENDING") // PENDING, SENT, FAILED
-  scheduledFor    DateTime  // Date d'envoi prévue
-  sentAt          DateTime? // Date d'envoi réel
-  error           String?   // Message d'erreur si échec
+  data            String?   // JSON data
+  status          String    @default("PENDING") // PENDING, SENT, FAILED, READ
+  scheduledFor    DateTime
+  sentAt          DateTime?
+  readAt          DateTime?
+  error           String?
   createdAt       DateTime  @default(now())
-  
+
   // Relations
   User            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+
   @@index([status])
   @@index([scheduledFor])
+  @@index([userId])
+}
+
+// ==================== MATERIALS & INVENTORY ====================
+
+model Product {
+  id           String   @id @default(cuid())
+  agencyId     String
+  name         String
+  sku          String?
+  category     String?  // CLEANING, SUPPLIES, EQUIPMENT
+  unit         String   @default("unité")
+  quantity     Float    @default(0)
+  minQuantity  Float    @default(5)
+  unitPrice    Float?
+  location     String?  // Où stocké
+  supplier     String?
+  lastRestocked DateTime?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  Agency       Agency       @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  Movements    StockMovement[]
+
+  @@index([agencyId])
+  @@index([category])
+}
+
+model Equipment {
+  id           String   @id @default(cuid())
+  agencyId     String
+  name         String
+  serialNumber String?
+  category     String?  // VACUUM, MACHINE, VEHICLE, OTHER
+  purchaseDate DateTime?
+  purchasePrice Float?
+  condition    String   @default("GOOD") // NEW, GOOD, FAIR, POOR
+  assignedTo   String?  // employeeId
+  lastMaintenance DateTime?
+  nextMaintenance DateTime?
+  notes        String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  Agency       Agency   @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+
+  @@index([agencyId])
+  @@index([assignedTo])
+}
+
+model StockMovement {
+  id          String   @id @default(cuid())
+  productId   String
+  type        String   // IN, OUT, ADJUSTMENT
+  quantity    Float
+  reason      String?
+  sessionId   String?  // Lien avec session si utilisé
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  // Relations
+  Product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([type])
+}
+
+// ==================== SETTINGS ====================
+
+model Setting {
+  id          String   @id @default(cuid())
+  agencyId    String?  // Null = global settings
+  key         String
+  value       String
+  type        String   @default("STRING") // STRING, NUMBER, BOOLEAN, JSON
+  category    String?
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([agencyId, key])
+  @@index([agencyId])
+  @@index([key])
 }

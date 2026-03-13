@@ -3,515 +3,333 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
-import { Site } from "@/types/database"
-import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { 
-  Loader2, Plus, MapPin, QrCode, LogOut, User, Settings, MoreVertical, Trash2, 
-  Calendar, Users, Building2, Bell, Clock
+  Users, Building2, Calendar, CreditCard, TrendingUp, 
+  Clock, CheckCircle, AlertCircle, ArrowRight, Plus,
+  Euro, UserCheck, Activity
 } from "lucide-react"
-import { toast } from "sonner"
-import { signOut } from "next-auth/react"
-import { ScheduleCalendar } from "@/components/calendar/ScheduleCalendar"
+import Link from "next/link"
+import { getDashboardStats } from "@/actions/reporting"
 
-interface SiteWithCount extends Site {
-  _count?: {
-    tasks: number
-    sessions: number
-  }
+interface DashboardStats {
+  employees: { total: number; active: number }
+  clients: { total: number; active: number }
+  sites: { total: number }
+  sessions: { thisWeek: number; thisMonth: number; completed: number }
+  revenue: { monthly: number }
+  pendingTasks: number
 }
 
 export default function DashboardPage() {
   const { data: session, status } = useSession()
-  const [sites, setSites] = useState<SiteWithCount[]>([])
+  const [stats, setStats] = useState<DashboardStats | null>(null)
   const [loading, setLoading] = useState(true)
-  const [dialogOpen, setDialogOpen] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
-  const [activeTab, setActiveTab] = useState("sites")
   const router = useRouter()
-
-  // Formulaire nouveau site
-  const [formData, setFormData] = useState({
-    name: "",
-    address: "",
-    pinCode: "",
-  })
-
-  useEffect(() => {
-    if (status === "unauthenticated") {
-      router.push("/login")
-    }
-  }, [status, router])
 
   useEffect(() => {
     if (status === "authenticated" && session) {
-      fetchSites()
+      loadStats()
     }
   }, [status, session])
 
-  const fetchSites = async () => {
-    try {
-      const response = await fetch("/api/sites")
-      const data = await response.json()
-
-      if (response.ok) {
-        setSites(data.sites || [])
-      } else {
-        toast.error("Erreur lors du chargement des sites")
-      }
-    } catch (error) {
-      console.error("Erreur:", error)
-      toast.error("Erreur lors du chargement des sites")
-    } finally {
-      setLoading(false)
-    }
+  const loadStats = async () => {
+    const data = await getDashboardStats()
+    setStats(data)
+    setLoading(false)
   }
 
-  const handleCreateSite = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setSubmitting(true)
-
-    try {
-      const response = await fetch("/api/sites", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: formData.name,
-          address: formData.address || null,
-          pinCode: formData.pinCode || null,
-        }),
-      })
-
-      const data = await response.json()
-
-      if (response.ok) {
-        toast.success("Site créé avec succès")
-        setDialogOpen(false)
-        setFormData({ name: "", address: "", pinCode: "" })
-        fetchSites()
-      } else {
-        toast.error(data.error || "Erreur lors de la création du site")
-      }
-    } catch (error) {
-      console.error("Erreur:", error)
-      toast.error("Erreur lors de la création du site")
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  const handleDeleteSite = async (siteId: string) => {
-    if (!confirm("Êtes-vous sûr de vouloir supprimer ce site ?")) return
-
-    try {
-      const response = await fetch(`/api/sites/${siteId}`, {
-        method: "DELETE",
-      })
-
-      if (response.ok) {
-        toast.success("Site supprimé")
-        fetchSites()
-      } else {
-        const data = await response.json()
-        toast.error(data.error || "Erreur lors de la suppression")
-      }
-    } catch (error) {
-      console.error("Erreur:", error)
-      toast.error("Erreur lors de la suppression")
-    }
-  }
-
-  const handleSignOut = async () => {
-    await signOut({ callbackUrl: "/" })
-  }
-
-  // Afficher un loader pendant le chargement
-  if (status === "loading" || loading) {
+  if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-500 mx-auto mb-4" />
-          <p className="text-muted-foreground">Chargement...</p>
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold">Tableau de bord</h1>
+          <p className="text-muted-foreground">Chargement des statistiques...</p>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {[1, 2, 3, 4].map((i) => (
+            <Card key={i}>
+              <CardContent className="pt-6">
+                <div className="h-16 bg-gray-100 animate-pulse rounded" />
+              </CardContent>
+            </Card>
+          ))}
         </div>
       </div>
     )
   }
 
-  // Rediriger si non authentifié
-  if (status === "unauthenticated" || !session) {
-    return null
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat("fr-FR", {
+      style: "currency",
+      currency: "EUR"
+    }).format(amount)
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="space-y-6">
       {/* Header */}
-      <header className="bg-white border-b sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-10 h-10 bg-blue-500 rounded-xl flex items-center justify-center">
-              <span className="text-white text-xl font-bold">C</span>
-            </div>
-            <span className="text-xl font-bold">CleanCheck</span>
-            {session.user?.role && (
-              <Badge variant="outline" className="ml-2">
-                {session.user.role === "AGENCY" ? "Agence" : 
-                 session.user.role === "EMPLOYEE" ? "Employé" : "Propriétaire"}
-              </Badge>
-            )}
-          </div>
-
-          <div className="flex items-center gap-4">
-            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-              <DialogTrigger asChild>
-                <Button className="bg-blue-500 hover:bg-blue-600">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Nouveau site
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <form onSubmit={handleCreateSite}>
-                  <DialogHeader>
-                    <DialogTitle>Ajouter un nouveau site</DialogTitle>
-                    <DialogDescription>
-                      Créez un site pour générer son QR Code unique.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-4 py-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="name">Nom du site *</Label>
-                      <Input
-                        id="name"
-                        placeholder="Ex: Bureau Paris Centre"
-                        value={formData.name}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="address">Adresse</Label>
-                      <Input
-                        id="address"
-                        placeholder="Ex: 123 Rue de la Paix, 75001 Paris"
-                        value={formData.address}
-                        onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="pinCode">Code PIN (optionnel)</Label>
-                      <Input
-                        id="pinCode"
-                        placeholder="Ex: 1234"
-                        maxLength={4}
-                        value={formData.pinCode}
-                        onChange={(e) => setFormData({ ...formData, pinCode: e.target.value.replace(/\D/g, "") })}
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Un code à 4 chiffres pour sécuriser l'accès des intervenants
-                      </p>
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
-                      Annuler
-                    </Button>
-                    <Button type="submit" className="bg-blue-500 hover:bg-blue-600" disabled={submitting}>
-                      {submitting ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Création...
-                        </>
-                      ) : (
-                        "Créer le site"
-                      )}
-                    </Button>
-                  </DialogFooter>
-                </form>
-              </DialogContent>
-            </Dialog>
-
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon">
-                  <User className="h-5 w-5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuLabel>
-                  {session.user?.name || session.user?.email}
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleSignOut}>
-                  <LogOut className="h-4 w-4 mr-2" />
-                  Déconnexion
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="container mx-auto px-4 py-8">
-        <div className="mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
           <h1 className="text-3xl font-bold">Tableau de bord</h1>
           <p className="text-muted-foreground">
-            Gérez vos sites, planifiez vos interventions et suivez l'activité
+            Bienvenue, {session?.user?.name || session?.user?.email}
           </p>
         </div>
-
-        {/* Stats Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-2">
-                <div className="p-2 bg-blue-100 rounded-lg">
-                  <MapPin className="h-5 w-5 text-blue-500" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold">{sites.length}</p>
-                  <p className="text-xs text-muted-foreground">Sites</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-2">
-                <div className="p-2 bg-green-100 rounded-lg">
-                  <QrCode className="h-5 w-5 text-green-500" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold">{sites.filter(s => s.pinCode).length}</p>
-                  <p className="text-xs text-muted-foreground">Sécurisés</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-2">
-                <div className="p-2 bg-purple-100 rounded-lg">
-                  <Calendar className="h-5 w-5 text-purple-500" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold">0</p>
-                  <p className="text-xs text-muted-foreground">Planifiés</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-2">
-                <div className="p-2 bg-orange-100 rounded-lg">
-                  <Clock className="h-5 w-5 text-orange-500" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold">0</p>
-                  <p className="text-xs text-muted-foreground">Cette semaine</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        <div className="flex gap-2">
+          <Button variant="outline" asChild>
+            <Link href="/dashboard/calendar">
+              <Calendar className="h-4 w-4 mr-2" />
+              Planning
+            </Link>
+          </Button>
+          <Button asChild>
+            <Link href="/dashboard/sites">
+              <Plus className="h-4 w-4 mr-2" />
+              Nouveau site
+            </Link>
+          </Button>
         </div>
+      </div>
 
-        {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="mb-6">
-            <TabsTrigger value="sites" className="flex items-center gap-2">
-              <MapPin className="h-4 w-4" />
-              Sites
-            </TabsTrigger>
-            <TabsTrigger value="calendar" className="flex items-center gap-2">
-              <Calendar className="h-4 w-4" />
-              Calendrier
-            </TabsTrigger>
-            <TabsTrigger value="team" className="flex items-center gap-2">
-              <Users className="h-4 w-4" />
-              Équipe
-            </TabsTrigger>
-            <TabsTrigger value="notifications" className="flex items-center gap-2">
-              <Bell className="h-4 w-4" />
-              Notifications
-            </TabsTrigger>
-          </TabsList>
-
-          {/* Sites Tab */}
-          <TabsContent value="sites">
-            {sites.length === 0 ? (
-              <Card className="text-center py-12">
-                <CardContent>
-                  <MapPin className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-                  <h3 className="text-xl font-semibold mb-2">Aucun site configuré</h3>
-                  <p className="text-muted-foreground mb-6">
-                    Commencez par créer votre premier site pour générer un QR Code.
-                  </p>
-                  <Button onClick={() => setDialogOpen(true)} className="bg-blue-500 hover:bg-blue-600">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Créer mon premier site
-                  </Button>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {sites.map((site) => (
-                  <Card 
-                    key={site.id} 
-                    className="cursor-pointer hover:border-blue-200 transition-colors group"
-                    onClick={() => router.push(`/dashboard/site/${site.id}`)}
-                  >
-                    <CardHeader className="pb-3">
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                            <MapPin className="h-6 w-6 text-blue-500" />
-                          </div>
-                          <div>
-                            <CardTitle className="text-lg">{site.name}</CardTitle>
-                            {site.address && (
-                              <CardDescription className="line-clamp-1">
-                                {site.address}
-                              </CardDescription>
-                            )}
-                          </div>
-                        </div>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                            <Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100">
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem 
-                              className="text-red-600"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleDeleteSite(site.id)
-                              }}
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Supprimer
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        {site.pinCode && (
-                          <div className="flex items-center gap-1">
-                            <Settings className="h-4 w-4" />
-                            <span>PIN: ****</span>
-                          </div>
-                        )}
-                        <div className="flex items-center gap-1">
-                          <QrCode className="h-4 w-4" />
-                          <span>QR Code prêt</span>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+      {/* Stats Cards */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => router.push("/dashboard/clients")}>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Clients actifs</p>
+                <p className="text-3xl font-bold">{stats?.clients.active || 0}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  sur {stats?.clients.total || 0} total
+                </p>
               </div>
-            )}
-          </TabsContent>
+              <div className="p-3 bg-blue-100 rounded-full">
+                <Users className="h-6 w-6 text-blue-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
-          {/* Calendar Tab */}
-          <TabsContent value="calendar">
-            <ScheduleCalendar 
-              sites={sites.map(s => ({ id: s.id, name: s.name, address: s.address }))} 
-            />
-          </TabsContent>
+        <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => router.push("/dashboard/employees")}>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Employés</p>
+                <p className="text-3xl font-bold">{stats?.employees.active || 0}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  sur {stats?.employees.total || 0} total
+                </p>
+              </div>
+              <div className="p-3 bg-green-100 rounded-full">
+                <UserCheck className="h-6 w-6 text-green-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
-          {/* Team Tab */}
-          <TabsContent value="team">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle>Équipe</CardTitle>
-                    <CardDescription>
-                      Gérez les membres de votre équipe de nettoyage
-                    </CardDescription>
-                  </div>
-                  <Button className="bg-blue-500 hover:bg-blue-600">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Ajouter un membre
-                  </Button>
+        <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => router.push("/dashboard/sites")}>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Sites</p>
+                <p className="text-3xl font-bold">{stats?.sites.total || 0}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Sites actifs
+                </p>
+              </div>
+              <div className="p-3 bg-purple-100 rounded-full">
+                <Building2 className="h-6 w-6 text-purple-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => router.push("/dashboard/finance")}>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">CA du mois</p>
+                <p className="text-3xl font-bold">{formatCurrency(stats?.revenue.monthly || 0)}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Factures payées
+                </p>
+              </div>
+              <div className="p-3 bg-emerald-100 rounded-full">
+                <Euro className="h-6 w-6 text-emerald-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Activity & Quick Actions */}
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Sessions this week */}
+        <Card className="lg:col-span-2">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <div>
+              <CardTitle>Activité de la semaine</CardTitle>
+              <CardDescription>Sessions planifiées et complétées</CardDescription>
+            </div>
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/dashboard/calendar">
+                Voir tout <ArrowRight className="h-4 w-4 ml-2" />
+              </Link>
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div className="flex items-center gap-3 p-4 bg-blue-50 rounded-lg">
+                <div className="p-2 bg-blue-100 rounded-full">
+                  <Calendar className="h-5 w-5 text-blue-600" />
                 </div>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center py-8 text-muted-foreground">
-                  <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>Créez une agence pour gérer votre équipe</p>
-                  <Button variant="outline" className="mt-4">
-                    <Building2 className="h-4 w-4 mr-2" />
-                    Créer mon agence
-                  </Button>
+                <div>
+                  <p className="text-2xl font-bold">{stats?.sessions.thisWeek || 0}</p>
+                  <p className="text-sm text-muted-foreground">Cette semaine</p>
                 </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Notifications Tab */}
-          <TabsContent value="notifications">
-            <Card>
-              <CardHeader>
-                <CardTitle>Configuration des notifications</CardTitle>
-                <CardDescription>
-                  Paramétrez les rappels automatiques pour vos interventions
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-6">
-                  <div className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-blue-100 rounded-lg">
-                        <Bell className="h-5 w-5 text-blue-500" />
-                      </div>
-                      <div>
-                        <p className="font-medium">Rappels par email</p>
-                        <p className="text-sm text-muted-foreground">
-                          Recevez un rappel 24h et 1h avant chaque intervention
-                        </p>
-                      </div>
-                    </div>
-                    <Badge variant="secondary">Bientôt disponible</Badge>
-                  </div>
-
-                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
-                    <p className="text-sm text-amber-800">
-                      <strong>Configuration requise :</strong> Pour activer les notifications email, 
-                      ajoutez votre clé API Resend dans les variables d'environnement.
-                    </p>
-                  </div>
+              </div>
+              <div className="flex items-center gap-3 p-4 bg-green-50 rounded-lg">
+                <div className="p-2 bg-green-100 rounded-full">
+                  <CheckCircle className="h-5 w-5 text-green-600" />
                 </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-      </main>
+                <div>
+                  <p className="text-2xl font-bold">{stats?.sessions.completed || 0}</p>
+                  <p className="text-sm text-muted-foreground">Complétées</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 p-4 bg-orange-50 rounded-lg">
+                <div className="p-2 bg-orange-100 rounded-full">
+                  <Clock className="h-5 w-5 text-orange-600" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{stats?.pendingTasks || 0}</p>
+                  <p className="text-sm text-muted-foreground">En attente</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Stats Bar */}
+            <div className="mt-6 pt-4 border-t">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Taux de complétion</span>
+                <span className="font-medium">
+                  {stats?.sessions.thisWeek 
+                    ? Math.round((stats.sessions.completed / stats.sessions.thisWeek) * 100) 
+                    : 0}%
+                </span>
+              </div>
+              <div className="mt-2 h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-blue-500 rounded-full transition-all"
+                  style={{ 
+                    width: `${stats?.sessions.thisWeek 
+                      ? Math.round((stats.sessions.completed / stats.sessions.thisWeek) * 100) 
+                      : 0}%` 
+                  }}
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Quick Actions */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Actions rapides</CardTitle>
+            <CardDescription>Raccourcis vers les fonctions principales</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <Button variant="outline" className="w-full justify-start" asChild>
+              <Link href="/dashboard/sites">
+                <Building2 className="h-4 w-4 mr-2" />
+                Gérer les sites
+              </Link>
+            </Button>
+            <Button variant="outline" className="w-full justify-start" asChild>
+              <Link href="/dashboard/employees">
+                <Users className="h-4 w-4 mr-2" />
+                Gérer les employés
+              </Link>
+            </Button>
+            <Button variant="outline" className="w-full justify-start" asChild>
+              <Link href="/dashboard/clients">
+                <Users className="h-4 w-4 mr-2" />
+                Gérer les clients
+              </Link>
+            </Button>
+            <Button variant="outline" className="w-full justify-start" asChild>
+              <Link href="/dashboard/finance">
+                <CreditCard className="h-4 w-4 mr-2" />
+                Facturation
+              </Link>
+            </Button>
+            <Button variant="outline" className="w-full justify-start" asChild>
+              <Link href="/dashboard/reports">
+                <Activity className="h-4 w-4 mr-2" />
+                Rapports
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Recent Activity & Alerts */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Pending Items */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-orange-500" />
+              À traiter
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {stats?.pendingTasks ? (
+                <>
+                  <div className="flex items-center justify-between p-3 bg-orange-50 rounded-lg">
+                    <span className="text-sm">Sessions en attente</span>
+                    <Badge variant="secondary">{stats.pendingTasks}</Badge>
+                  </div>
+                </>
+              ) : (
+                <p className="text-center text-muted-foreground py-8">
+                  Aucun élément en attente
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Tips */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-blue-500" />
+              Conseils
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3 text-sm text-muted-foreground">
+              <p>
+                💡 <strong>Conseil :</strong> Utilisez le calendrier pour planifier vos sessions récurrentes 
+                et gagner du temps sur la gestion de votre planning.
+              </p>
+              <p>
+                📊 <strong>Stats :</strong> Consultez les rapports pour suivre la performance de vos employés 
+                et la satisfaction de vos clients.
+              </p>
+              <p>
+                📱 <strong>QR Code :</strong> Imprimez les QR codes de vos sites pour permettre aux employés 
+                de scanner facilement à leur arrivée.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   )
 }
