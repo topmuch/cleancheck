@@ -7,6 +7,8 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ==================== AUTH MODELS ====================
+
 model Account {
   id                String  @id
   userId            String
@@ -33,32 +35,154 @@ model AuthSession {
   User         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-model CleaningSession {
-  id              String        @id
-  siteId          String
-  workerName      String
-  startTime       DateTime      @default(now())
-  endTime         DateTime?
-  durationSeconds Int?
-  status          String        @default("IN_PROGRESS")
-  notes           String?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime
-  Site            Site          @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  SessionTask     SessionTask[]
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
 
-  @@index([status])
+  @@unique([identifier, token])
+}
+
+// ==================== USER & ROLES ====================
+
+model User {
+  id               String             @id @default(cuid())
+  email            String             @unique
+  password         String
+  name             String?
+  phone            String?
+  role             String             @default("OWNER") // OWNER, AGENCY, MANAGER, EMPLOYEE, SUPERADMIN
+  agencyId         String?            // Pour les employés/managers d'agence
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  
+  // Relations
+  Account          Account[]
+  AuthSession      AuthSession[]
+  Agency           Agency?            @relation(fields: [agencyId], references: [id])
+  Sites            Site[]             @relation("OwnerSites")
+  CleaningSessions CleaningSession[]
+  Notifications    Notification[]
+
+  @@index([role])
+  @@index([agencyId])
+}
+
+// ==================== AGENCY ====================
+
+model Agency {
+  id        String   @id @default(cuid())
+  name      String
+  email     String?  // Contact email
+  phone     String?
+  address   String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  Users       User[]      // Employés/managers
+  Sites       Site[]      @relation("AgencyClients") // Clients gérés par l'agence
+  Employees   Employee[]
+}
+
+model Employee {
+  id        String   @id @default(cuid())
+  name      String
+  email     String?  // Optionnel (pour login futur)
+  phone     String
+  isActive  Boolean  @default(true)
+  agencyId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  agency          Agency           @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  CleaningSession CleaningSession[]
+  
+  @@index([agencyId])
+}
+
+// ==================== SITE & TASKS ====================
+
+model Site {
+  id          String   @id @default(cuid())
+  userId      String   // Propriétaire (client particulier)
+  agencyId    String?  // Si géré par une agence
+  name        String
+  address     String?
+  pinCode     String?
+  qrToken     String   @unique
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  User             User?              @relation("OwnerSites", fields: [userId], references: [id], onDelete: Cascade)
+  Agency           Agency?            @relation("AgencyClients", fields: [agencyId], references: [id], onDelete: SetNull)
+  Task             Task[]
+  CleaningSession  CleaningSession[]
+  ScheduledSession ScheduledSession[]
+  
+  @@index([qrToken])
+  @@index([userId])
+  @@index([agencyId])
+}
+
+model Task {
+  id          String        @id @default(cuid())
+  siteId      String
+  name        String
+  description String?
+  orderIndex  Int           @default(0)
+  isActive    Boolean       @default(true)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  
+  // Relations
+  Site        Site          @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  SessionTask SessionTask[]
+  
   @@index([siteId])
 }
 
+// ==================== CLEANING SESSIONS ====================
+
+model CleaningSession {
+  id              String        @id @default(cuid())
+  siteId          String
+  employeeId      String?       // Employé de l'agence (optionnel)
+  userId          String?       // Utilisateur connecté (pour les particuliers)
+  workerName      String        // Nom affiché (peut être différent)
+  startTime       DateTime      @default(now())
+  endTime         DateTime?
+  durationSeconds Int?
+  status          String        @default("IN_PROGRESS") // IN_PROGRESS, COMPLETED, CANCELLED
+  notes           String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  // Relations
+  Site            Site          @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  Employee        Employee?     @relation(fields: [employeeId], references: [id])
+  User            User?         @relation(fields: [userId], references: [id])
+  SessionTask     SessionTask[]
+  
+  @@index([status])
+  @@index([siteId])
+  @@index([employeeId])
+}
+
 model SessionTask {
-  id              String          @id
+  id              String          @id @default(cuid())
   sessionId       String
   taskId          String
   completed       Boolean         @default(false)
   completedAt     DateTime?
   notes           String?
   createdAt       DateTime        @default(now())
+  
+  // Relations
   Task            Task            @relation(fields: [taskId], references: [id], onDelete: Cascade)
   CleaningSession CleaningSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
@@ -66,56 +190,47 @@ model SessionTask {
   @@index([sessionId])
 }
 
-model Site {
-  id              String            @id
-  userId          String
-  name            String
-  address         String?
-  pinCode         String?
-  qrToken         String            @unique
-  isActive        Boolean           @default(true)
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime
-  CleaningSession CleaningSession[]
-  User            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  Task            Task[]
+// ==================== SCHEDULED SESSIONS (CALENDAR) ====================
 
-  @@index([qrToken])
-  @@index([userId])
-}
-
-model Task {
-  id          String        @id
-  siteId      String
-  name        String
-  description String?
-  orderIndex  Int           @default(0)
-  isActive    Boolean       @default(true)
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime
-  SessionTask SessionTask[]
-  Site        Site          @relation(fields: [siteId], references: [id], onDelete: Cascade)
-
+model ScheduledSession {
+  id              String           @id @default(cuid())
+  siteId          String
+  scheduledDate   DateTime         // Date et heure prévue
+  duration        Int              @default(60) // Durée en minutes
+  frequency       String           @default("NONE") // NONE, DAILY, WEEKLY, BIWEEKLY, MONTHLY
+  status          String           @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED, CANCELLED
+  assignedTo      String?          // Nom ou ID de l'employé assigné
+  notes           String?
+  reminderSent    Boolean          @default(false) // Rappel 24h envoyé
+  reminder1hSent  Boolean          @default(false) // Rappel 1h envoyé
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  
+  // Relations
+  Site            Site             @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  
+  @@index([scheduledDate])
+  @@index([status])
   @@index([siteId])
 }
 
-model User {
-  id          String        @id
-  email       String        @unique
-  password    String
-  name        String?
-  role        String        @default("CLIENT")
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime
-  Account     Account[]
-  AuthSession AuthSession[]
-  Site        Site[]
-}
+// ==================== NOTIFICATIONS ====================
 
-model VerificationToken {
-  identifier String
-  token      String   @unique
-  expires    DateTime
-
-  @@unique([identifier, token])
+model Notification {
+  id              String    @id @default(cuid())
+  userId          String    // Destinataire
+  type            String    // EMAIL, SMS, WHATSAPP
+  subject         String
+  message         String
+  status          String    @default("PENDING") // PENDING, SENT, FAILED
+  scheduledFor    DateTime  // Date d'envoi prévue
+  sentAt          DateTime? // Date d'envoi réel
+  error           String?   // Message d'erreur si échec
+  createdAt       DateTime  @default(now())
+  
+  // Relations
+  User            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([status])
+  @@index([scheduledFor])
 }

@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Badge } from "@/components/ui/badge"
 import {
   Dialog,
   DialogContent,
@@ -25,9 +27,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Loader2, Plus, MapPin, QrCode, LogOut, User, Settings, MoreVertical, Trash2 } from "lucide-react"
+import { 
+  Loader2, Plus, MapPin, QrCode, LogOut, User, Settings, MoreVertical, Trash2, 
+  Calendar, Users, Building2, Bell, Clock
+} from "lucide-react"
 import { toast } from "sonner"
 import { signOut } from "next-auth/react"
+import { ScheduleCalendar } from "@/components/calendar/ScheduleCalendar"
 
 interface SiteWithCount extends Site {
   _count?: {
@@ -42,6 +48,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [activeTab, setActiveTab] = useState("sites")
   const router = useRouter()
 
   // Formulaire nouveau site
@@ -166,6 +173,12 @@ export default function DashboardPage() {
               <span className="text-white text-xl font-bold">C</span>
             </div>
             <span className="text-xl font-bold">CleanCheck</span>
+            {session.user?.role && (
+              <Badge variant="outline" className="ml-2">
+                {session.user.role === "AGENCY" ? "Agence" : 
+                 session.user.role === "EMPLOYEE" ? "Employé" : "Propriétaire"}
+              </Badge>
+            )}
           </div>
 
           <div className="flex items-center gap-4">
@@ -261,88 +274,243 @@ export default function DashboardPage() {
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold">Mes sites</h1>
+          <h1 className="text-3xl font-bold">Tableau de bord</h1>
           <p className="text-muted-foreground">
-            Gérez vos sites et suivez les interventions
+            Gérez vos sites, planifiez vos interventions et suivez l'activité
           </p>
         </div>
 
-        {sites.length === 0 ? (
-          <Card className="text-center py-12">
-            <CardContent>
-              <MapPin className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-xl font-semibold mb-2">Aucun site configuré</h3>
-              <p className="text-muted-foreground mb-6">
-                Commencez par créer votre premier site pour générer un QR Code.
-              </p>
-              <Button onClick={() => setDialogOpen(true)} className="bg-blue-500 hover:bg-blue-600">
-                <Plus className="h-4 w-4 mr-2" />
-                Créer mon premier site
-              </Button>
+        {/* Stats Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <MapPin className="h-5 w-5 text-blue-500" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{sites.length}</p>
+                  <p className="text-xs text-muted-foreground">Sites</p>
+                </div>
+              </div>
             </CardContent>
           </Card>
-        ) : (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {sites.map((site) => (
-              <Card 
-                key={site.id} 
-                className="cursor-pointer hover:border-blue-200 transition-colors group"
-                onClick={() => router.push(`/dashboard/site/${site.id}`)}
-              >
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                        <MapPin className="h-6 w-6 text-blue-500" />
-                      </div>
-                      <div>
-                        <CardTitle className="text-lg">{site.name}</CardTitle>
-                        {site.address && (
-                          <CardDescription className="line-clamp-1">
-                            {site.address}
-                          </CardDescription>
-                        )}
-                      </div>
-                    </div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                        <Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100">
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem 
-                          className="text-red-600"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleDeleteSite(site.id)
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          Supprimer
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </CardHeader>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-green-100 rounded-lg">
+                  <QrCode className="h-5 w-5 text-green-500" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{sites.filter(s => s.pinCode).length}</p>
+                  <p className="text-xs text-muted-foreground">Sécurisés</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-purple-100 rounded-lg">
+                  <Calendar className="h-5 w-5 text-purple-500" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">0</p>
+                  <p className="text-xs text-muted-foreground">Planifiés</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-orange-100 rounded-lg">
+                  <Clock className="h-5 w-5 text-orange-500" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">0</p>
+                  <p className="text-xs text-muted-foreground">Cette semaine</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Tabs */}
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="mb-6">
+            <TabsTrigger value="sites" className="flex items-center gap-2">
+              <MapPin className="h-4 w-4" />
+              Sites
+            </TabsTrigger>
+            <TabsTrigger value="calendar" className="flex items-center gap-2">
+              <Calendar className="h-4 w-4" />
+              Calendrier
+            </TabsTrigger>
+            <TabsTrigger value="team" className="flex items-center gap-2">
+              <Users className="h-4 w-4" />
+              Équipe
+            </TabsTrigger>
+            <TabsTrigger value="notifications" className="flex items-center gap-2">
+              <Bell className="h-4 w-4" />
+              Notifications
+            </TabsTrigger>
+          </TabsList>
+
+          {/* Sites Tab */}
+          <TabsContent value="sites">
+            {sites.length === 0 ? (
+              <Card className="text-center py-12">
                 <CardContent>
-                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                    {site.pinCode && (
-                      <div className="flex items-center gap-1">
-                        <Settings className="h-4 w-4" />
-                        <span>PIN: ****</span>
-                      </div>
-                    )}
-                    <div className="flex items-center gap-1">
-                      <QrCode className="h-4 w-4" />
-                      <span>QR Code prêt</span>
-                    </div>
-                  </div>
+                  <MapPin className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-xl font-semibold mb-2">Aucun site configuré</h3>
+                  <p className="text-muted-foreground mb-6">
+                    Commencez par créer votre premier site pour générer un QR Code.
+                  </p>
+                  <Button onClick={() => setDialogOpen(true)} className="bg-blue-500 hover:bg-blue-600">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Créer mon premier site
+                  </Button>
                 </CardContent>
               </Card>
-            ))}
-          </div>
-        )}
+            ) : (
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {sites.map((site) => (
+                  <Card 
+                    key={site.id} 
+                    className="cursor-pointer hover:border-blue-200 transition-colors group"
+                    onClick={() => router.push(`/dashboard/site/${site.id}`)}
+                  >
+                    <CardHeader className="pb-3">
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                            <MapPin className="h-6 w-6 text-blue-500" />
+                          </div>
+                          <div>
+                            <CardTitle className="text-lg">{site.name}</CardTitle>
+                            {site.address && (
+                              <CardDescription className="line-clamp-1">
+                                {site.address}
+                              </CardDescription>
+                            )}
+                          </div>
+                        </div>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                            <Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100">
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem 
+                              className="text-red-600"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleDeleteSite(site.id)
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Supprimer
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                        {site.pinCode && (
+                          <div className="flex items-center gap-1">
+                            <Settings className="h-4 w-4" />
+                            <span>PIN: ****</span>
+                          </div>
+                        )}
+                        <div className="flex items-center gap-1">
+                          <QrCode className="h-4 w-4" />
+                          <span>QR Code prêt</span>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          {/* Calendar Tab */}
+          <TabsContent value="calendar">
+            <ScheduleCalendar 
+              sites={sites.map(s => ({ id: s.id, name: s.name, address: s.address }))} 
+            />
+          </TabsContent>
+
+          {/* Team Tab */}
+          <TabsContent value="team">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Équipe</CardTitle>
+                    <CardDescription>
+                      Gérez les membres de votre équipe de nettoyage
+                    </CardDescription>
+                  </div>
+                  <Button className="bg-blue-500 hover:bg-blue-600">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Ajouter un membre
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="text-center py-8 text-muted-foreground">
+                  <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>Créez une agence pour gérer votre équipe</p>
+                  <Button variant="outline" className="mt-4">
+                    <Building2 className="h-4 w-4 mr-2" />
+                    Créer mon agence
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Notifications Tab */}
+          <TabsContent value="notifications">
+            <Card>
+              <CardHeader>
+                <CardTitle>Configuration des notifications</CardTitle>
+                <CardDescription>
+                  Paramétrez les rappels automatiques pour vos interventions
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between p-4 border rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-blue-100 rounded-lg">
+                        <Bell className="h-5 w-5 text-blue-500" />
+                      </div>
+                      <div>
+                        <p className="font-medium">Rappels par email</p>
+                        <p className="text-sm text-muted-foreground">
+                          Recevez un rappel 24h et 1h avant chaque intervention
+                        </p>
+                      </div>
+                    </div>
+                    <Badge variant="secondary">Bientôt disponible</Badge>
+                  </div>
+
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                    <p className="text-sm text-amber-800">
+                      <strong>Configuration requise :</strong> Pour activer les notifications email, 
+                      ajoutez votre clé API Resend dans les variables d'environnement.
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </main>
     </div>
   )
