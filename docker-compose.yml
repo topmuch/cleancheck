@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  cleancheck:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cleancheck
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=file:/app/data/cleancheck.db
+      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-change-this-secret-in-production}
+    volumes:
+      - cleancheck_data:/app/data
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  cleancheck_data:
+    driver: local
