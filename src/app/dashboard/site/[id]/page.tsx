@@ -20,6 +20,12 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   AlertDialog,
@@ -42,6 +48,8 @@ import {
   CheckCircle,
   Loader2,
   MapPin,
+  ChevronDown,
+  Building2,
 } from "lucide-react"
 
 interface SessionWithTasks extends CleaningSession {
@@ -56,18 +64,24 @@ interface SiteWithDetails extends Site {
   sessions: SessionWithTasks[]
 }
 
+interface SimpleSite {
+  id: string
+  name: string
+  address: string | null
+}
+
 export default function SiteDetailPage() {
   const { id } = useParams()
   const router = useRouter()
   const { status } = useSession()
   const [site, setSite] = useState<SiteWithDetails | null>(null)
+  const [allSites, setAllSites] = useState<SimpleSite[]>([])
   const [loading, setLoading] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [deleteTaskId, setDeleteTaskId] = useState<string | null>(null)
   const qrRef = useRef<HTMLDivElement>(null)
 
-  // Formulaire nouvelle tâche
   const [taskForm, setTaskForm] = useState({
     name: "",
     description: "",
@@ -82,6 +96,7 @@ export default function SiteDetailPage() {
   useEffect(() => {
     if (status === "authenticated" && id) {
       fetchSite()
+      fetchAllSites()
     }
   }, [status, id])
 
@@ -101,6 +116,18 @@ export default function SiteDetailPage() {
       toast.error("Erreur lors du chargement")
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchAllSites = async () => {
+    try {
+      const response = await fetch("/api/sites")
+      const data = await response.json()
+      if (response.ok) {
+        setAllSites(data.sites || [])
+      }
+    } catch (error) {
+      console.error("Erreur chargement sites:", error)
     }
   }
 
@@ -265,12 +292,52 @@ export default function SiteDetailPage() {
       {/* Header */}
       <header className="bg-white border-b sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4 flex items-center gap-4">
-          <Button variant="ghost" onClick={() => router.push("/dashboard")}>
+          <Button variant="ghost" onClick={() => router.push("/dashboard/sites")}>
             <ArrowLeft className="h-4 w-4 mr-2" />
             Retour
           </Button>
-          <div className="flex-1">
-            <h1 className="text-xl font-bold">{site.name}</h1>
+          
+          {/* Site Selector */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="min-w-[200px] justify-between">
+                <div className="flex items-center gap-2">
+                  <Building2 className="h-4 w-4 text-blue-500" />
+                  <span className="truncate">{site.name}</span>
+                </div>
+                <ChevronDown className="h-4 w-4 ml-2 opacity-50" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-[280px]">
+              {allSites.map((s) => (
+                <DropdownMenuItem
+                  key={s.id}
+                  onClick={() => router.push(`/dashboard/site/${s.id}`)}
+                  className={s.id === site.id ? "bg-blue-50" : ""}
+                >
+                  <div className="flex flex-col items-start">
+                    <span className="font-medium">{s.name}</span>
+                    {s.address && (
+                      <span className="text-xs text-muted-foreground truncate max-w-[240px]">
+                        {s.address}
+                      </span>
+                    )}
+                  </div>
+                  {s.id === site.id && (
+                    <CheckCircle className="h-4 w-4 text-blue-500 ml-auto" />
+                  )}
+                </DropdownMenuItem>
+              ))}
+              {allSites.length === 0 && (
+                <div className="px-2 py-4 text-center text-muted-foreground text-sm">
+                  Aucun site
+                </div>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* Site info */}
+          <div className="flex-1 hidden md:block">
             {site.address && (
               <p className="text-sm text-muted-foreground flex items-center gap-1">
                 <MapPin className="h-3 w-3" />
@@ -284,10 +351,16 @@ export default function SiteDetailPage() {
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
         <Tabs defaultValue="tasks" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3 max-w-md">
-            <TabsTrigger value="tasks">Tâches</TabsTrigger>
-            <TabsTrigger value="qrcode">QR Code</TabsTrigger>
-            <TabsTrigger value="history">Historique</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-3 max-w-md bg-gray-100 p-1 rounded-lg">
+            <TabsTrigger value="tasks" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
+              Tâches
+            </TabsTrigger>
+            <TabsTrigger value="qrcode" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
+              QR Code
+            </TabsTrigger>
+            <TabsTrigger value="history" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
+              Historique
+            </TabsTrigger>
           </TabsList>
 
           {/* Onglet Tâches */}
